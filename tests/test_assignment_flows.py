@@ -114,7 +114,7 @@ def test_workflow_violation_and_valid_transition(client: TestClient) -> None:
     assert detail["code"] == "workflow_violation"
     assert detail["current_status"] == "To Do"
     assert detail["requested_status"] == "Done"
-    assert detail["allowed_transitions"] == ["In Progress"]
+    assert detail["allowed_transitions"] == ["Backlog", "In Progress"]
 
     valid = client.post(
         f"/api/issues/{todo['id']}/transitions?user_id={users[0]['id']}",
@@ -126,6 +126,45 @@ def test_workflow_violation_and_valid_transition(client: TestClient) -> None:
 
     activity = client.get(f"/api/projects/{project['id']}/activity").json()
     assert any(row["action"] == "issue_moved" for row in activity)
+
+
+def test_backward_transition_is_supported_when_configured(client: TestClient) -> None:
+    _, users, board = seeded_context(client)
+    issue = find_issue(board, issue_type="sub_task", status="In Review")
+
+    response = client.post(
+        f"/api/issues/{issue['id']}/transitions?user_id={users[0]['id']}",
+        json={"to_status": "In Progress", "expected_version": issue["version"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "In Progress"
+    assert response.json()["version"] == issue["version"] + 1
+
+
+def test_backward_transition_from_done_is_supported_and_advertised(client: TestClient) -> None:
+    _, users, board = seeded_context(client)
+    issue = find_issue(board, issue_type="story", status="Done")
+
+    invalid = client.post(
+        f"/api/issues/{issue['id']}/transitions?user_id={users[0]['id']}",
+        json={"to_status": "Backlog", "expected_version": issue["version"]},
+    )
+    assert invalid.status_code == 422
+    detail = invalid.json()["detail"]
+    assert detail["code"] == "workflow_violation"
+    assert detail["current_status"] == "Done"
+    assert detail["requested_status"] == "Backlog"
+    assert detail["allowed_transitions"] == ["In Review"]
+
+    response = client.post(
+        f"/api/issues/{issue['id']}/transitions?user_id={users[0]['id']}",
+        json={"to_status": "In Review", "expected_version": issue["version"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "In Review"
+    assert response.json()["version"] == issue["version"] + 1
 
 
 def test_sprint_completion_carry_over_and_velocity(client: TestClient) -> None:

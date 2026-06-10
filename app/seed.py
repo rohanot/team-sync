@@ -10,6 +10,23 @@ from app import models
 
 def seed_demo_data(db: Session) -> None:
     project = db.scalar(select(models.Project).where(models.Project.key == "TS"))
+    workflow_status_specs = [
+        ("Backlog", 0, False),
+        ("To Do", 1, False),
+        ("In Progress", 2, False),
+        ("In Review", 3, False),
+        ("Done", 4, True),
+    ]
+    workflow_edges = [
+        ("Backlog", "To Do"),
+        ("To Do", "Backlog"),
+        ("To Do", "In Progress"),
+        ("In Progress", "To Do"),
+        ("In Progress", "In Review"),
+        ("In Review", "In Progress"),
+        ("In Review", "Done"),
+        ("Done", "In Review"),
+    ]
 
     # Make sure users exist
     users = []
@@ -35,7 +52,37 @@ def seed_demo_data(db: Session) -> None:
                     models.ProjectMember(project_id=project.id, user_id=users[2].id, role="viewer"),
                 ]
             )
-            db.commit()
+        existing_statuses = {
+            status.name: status
+            for status in db.scalars(select(models.WorkflowStatus).where(models.WorkflowStatus.project_id == project.id)).all()
+        }
+        for name, position, is_done in workflow_status_specs:
+            if name not in existing_statuses:
+                db.add(models.WorkflowStatus(project_id=project.id, name=name, position=position, is_done=is_done))
+        db.flush()
+        status_lookup = {
+            status.name: status
+            for status in db.scalars(select(models.WorkflowStatus).where(models.WorkflowStatus.project_id == project.id)).all()
+        }
+        existing_edges = {
+            (transition.from_status.name, transition.to_status.name)
+            for transition in db.scalars(
+                select(models.WorkflowTransition)
+                .join(models.WorkflowTransition.from_status)
+                .join(models.WorkflowTransition.to_status)
+                .where(models.WorkflowTransition.project_id == project.id)
+            ).all()
+        }
+        for from_name, to_name in workflow_edges:
+            if (from_name, to_name) not in existing_edges:
+                db.add(
+                    models.WorkflowTransition(
+                        project_id=project.id,
+                        from_status_id=status_lookup[from_name].id,
+                        to_status_id=status_lookup[to_name].id,
+                    )
+                )
+        db.commit()
         return
 
     project = models.Project(key="TS", name="TeamSync Platform")
@@ -50,21 +97,13 @@ def seed_demo_data(db: Session) -> None:
     )
 
     statuses = [
-        models.WorkflowStatus(project_id=project.id, name="Backlog", position=0),
-        models.WorkflowStatus(project_id=project.id, name="To Do", position=1),
-        models.WorkflowStatus(project_id=project.id, name="In Progress", position=2),
-        models.WorkflowStatus(project_id=project.id, name="In Review", position=3),
-        models.WorkflowStatus(project_id=project.id, name="Done", position=4, is_done=True),
+        models.WorkflowStatus(project_id=project.id, name=name, position=position, is_done=is_done)
+        for name, position, is_done in workflow_status_specs
     ]
     db.add_all(statuses)
     db.flush()
     by_name = {status.name: status for status in statuses}
-    for from_name, to_name in [
-        ("Backlog", "To Do"),
-        ("To Do", "In Progress"),
-        ("In Progress", "In Review"),
-        ("In Review", "Done"),
-    ]:
+    for from_name, to_name in workflow_edges:
         db.add(
             models.WorkflowTransition(
                 project_id=project.id,
