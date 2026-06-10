@@ -641,7 +641,7 @@ function renderWorkspace() {
         <div class="grid grid-cols-1 xl:grid-cols-[1.4fr_0.8fr] gap-6 items-start">
           <div class="space-y-6">
             <!-- Active Sprint section -->
-            <div class="collapse collapse-arrow bg-white border border-slate-200 rounded-2xl shadow-sm">
+            <div class="collapse collapse-arrow relative bg-white border border-slate-200 rounded-2xl shadow-sm">
               <input type="checkbox" checked /> 
               <div class="collapse-title flex items-center justify-between pr-12">
                 <div class="flex items-center gap-3">
@@ -664,19 +664,21 @@ function renderWorkspace() {
               ${plannedSprints.length === 0 
                 ? `<div class="bg-white border border-dashed border-slate-200 rounded-2xl py-8 text-center text-xs text-slate-400 font-medium shadow-sm">No planned cycles mapped.</div>`
                 : plannedSprints.map(s => `
-                    <div class="collapse collapse-arrow bg-white border border-slate-200 rounded-2xl shadow-sm">
-                      <input type="checkbox" /> 
-                      <div class="collapse-title flex items-center justify-between pr-12">
-                        <div class="flex items-center gap-3">
-                          <span class="badge bg-slate-100 text-slate-600 font-bold text-[9px] rounded">PLANNED</span>
-                          <span class="font-bold text-xs tracking-wide text-slate-700">${escapeHtml(s.name)}</span>
-                        </div>
-                        <button class="btn-start-sprint btn btn-xs btn-success font-bold rounded text-[10px]" data-id="${s.id}">Start Sprint</button>
-                      </div>
-                      <div class="collapse-content space-y-4 pt-2">
-                        ${renderSprintIssueList(allIssues.filter(i => i.sprint?.id === s.id))}
-                      </div>
-                    </div>
+            <div class="collapse collapse-arrow relative bg-white border border-slate-200 rounded-2xl shadow-sm">
+              <input type="checkbox" />
+              <div class="collapse-title flex items-center justify-between pr-12">
+                <div class="flex items-center gap-3">
+                  <span class="badge bg-slate-100 text-slate-600 font-bold text-[9px] rounded">PLANNED</span>
+                  <span class="font-bold text-xs tracking-wide text-slate-700">${escapeHtml(s.name)}</span>
+                </div>
+              </div>
+              <div class="absolute right-12 top-4 z-20 pointer-events-none">
+                <button class="btn-start-sprint btn btn-xs btn-success font-bold rounded text-[10px] pointer-events-auto" data-id="${s.id}" type="button">Start Sprint</button>
+              </div>
+              <div class="collapse-content space-y-4 pt-2">
+                ${renderSprintIssueList(allIssues.filter(i => i.sprint?.id === s.id))}
+              </div>
+            </div>
                   `).join("")}
             </div>
 
