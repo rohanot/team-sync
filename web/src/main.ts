@@ -83,6 +83,7 @@ const state = {
   selectedIssue: null as Issue | null,
   selectedIssueComments: [] as Comment[],
   selectedIssueActivities: [] as ActivityLog[],
+  drawerStatusSaving: false,
   
   wsConnected: false,
 };
@@ -798,6 +799,7 @@ async function openDetailDrawer(issueId: string) {
     const issue = state.board?.columns.flatMap(c => c.issues).find(i => i.id === issueId);
     if (!issue) return;
     state.selectedIssue = issue;
+    state.drawerStatusSaving = false;
     
     state.selectedIssueComments = await request<Comment[]>(`/api/issues/${issueId}/comments`);
     state.selectedIssueActivities = await request<ActivityLog[]>(`/api/projects/${projectId()}/activity?issue_id=${issueId}`);
@@ -868,7 +870,7 @@ function updateDetailDrawer() {
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <label class="text-[9px] uppercase tracking-wider font-extrabold opacity-50 block mb-1.5 font-mono-tag text-slate-500">Status</label>
-                <select id="drawer-status" class="select select-sm w-full font-semibold bg-slate-50 rounded-lg text-xs">
+                <select id="drawer-status" class="select select-sm w-full font-semibold bg-slate-50 rounded-lg text-xs" ${state.drawerStatusSaving ? "disabled" : ""}>
                   ${state.board?.columns.map(col => `<option value="${col.status.name}" ${col.status.name === issue.status ? "selected" : ""}>${escapeHtml(col.status.name)}</option>`).join("")}
                 </select>
               </div>
@@ -917,7 +919,7 @@ function updateDetailDrawer() {
             </div>
 
             <div class="flex items-center justify-between border-t border-slate-100 pt-4">
-              <button id="btn-save-issue" class="btn btn-sm btn-primary font-bold rounded-lg text-xs text-white">Save Changes</button>
+              <button id="btn-save-issue" class="btn btn-sm btn-primary font-bold rounded-lg text-xs text-white" ${state.drawerStatusSaving ? "disabled" : ""}>Save Changes</button>
               
               <button id="btn-toggle-watch" class="btn btn-sm ${isWatching ? 'btn-neutral' : 'btn-outline btn-primary'} font-bold rounded-lg text-xs">
                 ${svgWatch(isWatching)} ${isWatching ? "Unwatch" : "Watch"}
@@ -978,13 +980,59 @@ function updateDetailDrawer() {
     </div>
   `;
 
+  const statusSelect = document.querySelector("#drawer-status") as HTMLSelectElement | null;
+  statusSelect?.addEventListener("change", async () => {
+    const current = state.selectedIssue;
+    if (!current || state.drawerStatusSaving) return;
+    const nextStatus = statusSelect.value;
+    if (nextStatus === current.status) return;
+
+    const previousStatus = current.status;
+    state.drawerStatusSaving = true;
+    current.status = nextStatus;
+    updateDetailDrawer();
+
+    try {
+      await request(`/api/issues/${current.id}/transitions?${userParam()}`, {
+        method: "POST",
+        body: JSON.stringify({ to_status: nextStatus, expected_version: current.version }),
+      });
+      showToast(`Status moved to ${nextStatus}`, "success");
+      await loadAllData(true);
+      renderWorkspace();
+      const fresh = state.board?.columns.flatMap(c => c.issues).find(i => i.id === current.id);
+      if (fresh) {
+        state.selectedIssue = fresh;
+      }
+      state.drawerStatusSaving = false;
+      updateDetailDrawer();
+    } catch (err: any) {
+      current.status = previousStatus;
+      state.drawerStatusSaving = false;
+      console.error(err);
+      if (statusSelect) statusSelect.value = previousStatus;
+      if (err.status === 409) {
+        showToast("Conflict: This issue changed elsewhere. Reloading data...", "warning");
+      } else {
+        showToast(`Failed to update status: ${err.body?.detail?.message || err.status}`, "error");
+      }
+      await loadAllData(true);
+      renderWorkspace();
+      const fresh = state.board?.columns.flatMap(c => c.issues).find(i => i.id === current.id);
+      if (fresh) {
+        state.selectedIssue = fresh;
+      }
+      updateDetailDrawer();
+    }
+  });
+
   // Attach Details actions
   document.querySelector("#btn-close-drawer")?.addEventListener("click", closeDetailDrawer);
   
   document.querySelector("#btn-save-issue")?.addEventListener("click", async () => {
+    if (state.drawerStatusSaving) return;
     const title = (document.querySelector("#drawer-title") as HTMLInputElement).value;
     const desc = (document.querySelector("#drawer-desc") as HTMLTextAreaElement).value;
-    const status = (document.querySelector("#drawer-status") as HTMLSelectElement).value;
     const priority = (document.querySelector("#drawer-priority") as HTMLSelectElement).value;
     const assigneeId = (document.querySelector("#drawer-assignee") as HTMLSelectElement).value || null;
     const pointsText = (document.querySelector("#drawer-points") as HTMLInputElement).value;
@@ -994,13 +1042,6 @@ function updateDetailDrawer() {
     const points = pointsText !== "" ? parseInt(pointsText, 10) : null;
     
     try {
-      if (status !== issue.status) {
-        await request(`/api/issues/${issue.id}/transitions?${userParam()}`, {
-          method: "POST",
-          body: JSON.stringify({ to_status: status, expected_version: issue.version }),
-        });
-      }
-      
       await request(`/api/issues/${issue.id}?${userParam()}`, {
         method: "PATCH",
         body: JSON.stringify({
@@ -1011,7 +1052,7 @@ function updateDetailDrawer() {
           sprint_id: sprintId,
           story_points: points,
           parent_id: parentId,
-          expected_version: status !== issue.status ? issue.version + 1 : issue.version,
+          expected_version: issue.version,
         }),
       });
 
