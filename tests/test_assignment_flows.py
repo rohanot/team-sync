@@ -183,6 +183,9 @@ def test_sprint_completion_carry_over_and_velocity(client: TestClient) -> None:
     assert body["velocity"] == 5
     assert any(issue["id"] == incomplete["id"] for issue in body["carried_over"])
     assert any(issue["status"] == "Done" for issue in body["completed"])
+    updated_sprints = client.get(f"/api/projects/{project['id']}/sprints").json()
+    assert next(s for s in updated_sprints if s["id"] == sprint_1["id"])["status"] == "completed"
+    assert next(s for s in updated_sprints if s["id"] == sprint_2["id"])["status"] == "active"
 
 
 def test_comments_mentions_watchers_notifications_and_search(client: TestClient) -> None:

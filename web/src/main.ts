@@ -648,7 +648,7 @@ function renderWorkspace() {
                   <span class="badge bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-[9px] rounded">ACTIVE</span>
                   <span class="font-extrabold text-xs tracking-wider uppercase text-slate-700">${activeSprint ? escapeHtml(activeSprint.name) : "No Active Sprints"}</span>
                 </div>
-                ${activeSprint ? `<button id="btn-complete-sprint" class="btn btn-xs btn-error font-bold rounded text-[10px]" data-id="${activeSprint.id}">Complete Sprint</button>` : ""}
+                ${activeSprint ? `<button id="btn-complete-sprint" type="button" class="btn btn-xs btn-error font-bold rounded text-[10px] relative z-20 pointer-events-auto" data-id="${activeSprint.id}">Complete Sprint</button>` : ""}
               </div>
               <div class="collapse-content space-y-4 pt-2">
                 ${activeSprint 
@@ -738,9 +738,10 @@ function renderWorkspace() {
       });
     });
 
-    document.querySelector("#btn-complete-sprint")?.addEventListener("click", async (e: any) => {
+    document.querySelector("#btn-complete-sprint")?.addEventListener("click", async (e: Event) => {
+      e.preventDefault();
       e.stopPropagation();
-      const sId = e.target.getAttribute("data-id");
+      const sId = (e.currentTarget as HTMLButtonElement | null)?.getAttribute("data-id");
       if (!sId) return;
       openCompleteSprintModal(sId);
     });

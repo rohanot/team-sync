@@ -544,9 +544,16 @@ def complete_sprint(db: Session, sprint_id: str, data: schemas.SprintCompleteReq
         add_activity(db, sprint.project_id, "issue_carried_over", actor_id, issue.id, {"from_sprint_id": sprint.id, "to_sprint_id": data.next_sprint_id})
     sprint.status = "completed"
     sprint.completed_at = models.utcnow()
+    db.flush()
+    if next_sprint is not None:
+        validate_single_active_sprint(db, sprint.project_id, next_sprint.id, "active")
+        next_sprint.status = "active"
     velocity = sum(issue.story_points or 0 for issue in completed)
     add_activity(db, sprint.project_id, "sprint_completed", actor_id, None, {"sprint_id": sprint.id, "velocity": velocity})
     add_realtime_event(db, sprint.project_id, "sprint_updated", {"sprint_id": sprint.id, "action": "completed", "velocity": velocity})
+    if next_sprint is not None:
+        add_activity(db, sprint.project_id, "sprint_updated", actor_id, None, {"sprint_id": next_sprint.id, "action": "activated"})
+        add_realtime_event(db, sprint.project_id, "sprint_updated", {"sprint_id": next_sprint.id, "action": "activated"})
     db.commit()
     refreshed_completed = [get_issue(db, issue.id) for issue in completed]
     refreshed_incomplete = [get_issue(db, issue.id) for issue in incomplete]
