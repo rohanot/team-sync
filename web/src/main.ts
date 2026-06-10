@@ -81,6 +81,7 @@ const state = {
   filterAssignee: "",
   
   selectedIssue: null as Issue | null,
+  drawerStatusDraft: null as string | null,
   selectedIssueComments: [] as Comment[],
   selectedIssueActivities: [] as ActivityLog[],
   
@@ -250,7 +251,7 @@ async function loadAllData(silent = false) {
         .flatMap(c => c.issues)
         .find(i => i.id === state.selectedIssue?.id);
       if (freshIssue) {
-        state.selectedIssue = freshIssue;
+        state.selectedIssue = { ...freshIssue };
         state.selectedIssueComments = await request<Comment[]>(`/api/issues/${freshIssue.id}/comments`);
         state.selectedIssueActivities = await request<ActivityLog[]>(`/api/projects/${projectId()}/activity?issue_id=${freshIssue.id}`);
       }
@@ -797,7 +798,8 @@ async function openDetailDrawer(issueId: string) {
   try {
     const issue = state.board?.columns.flatMap(c => c.issues).find(i => i.id === issueId);
     if (!issue) return;
-    state.selectedIssue = issue;
+    state.selectedIssue = { ...issue };
+    state.drawerStatusDraft = issue.status;
     
     state.selectedIssueComments = await request<Comment[]>(`/api/issues/${issueId}/comments`);
     state.selectedIssueActivities = await request<ActivityLog[]>(`/api/projects/${projectId()}/activity?issue_id=${issueId}`);
@@ -818,6 +820,7 @@ function closeDetailDrawer() {
   if (drawer) {
     drawer.classList.add("translate-x-full");
     state.selectedIssue = null;
+    state.drawerStatusDraft = null;
   }
 }
 
@@ -828,6 +831,7 @@ function updateDetailDrawer() {
 
   const totalPoints = issue.story_points ?? 0;
   const isWatching = issue.watchers.includes(state.activeUser);
+  const statusValue = state.drawerStatusDraft ?? issue.status;
   
   const allIssues = state.board?.columns.flatMap(c => c.issues) ?? [];
   const parentCandidates = allIssues.filter(i => i.id !== issue.id && i.type !== "sub_task");
@@ -869,7 +873,7 @@ function updateDetailDrawer() {
               <div>
                 <label class="text-[9px] uppercase tracking-wider font-extrabold opacity-50 block mb-1.5 font-mono-tag text-slate-500">Status</label>
                 <select id="drawer-status" class="select select-sm w-full font-semibold bg-slate-50 rounded-lg text-xs">
-                  ${state.board?.columns.map(col => `<option value="${col.status.name}" ${col.status.name === issue.status ? "selected" : ""}>${escapeHtml(col.status.name)}</option>`).join("")}
+                  ${state.board?.columns.map(col => `<option value="${col.status.name}" ${col.status.name === statusValue ? "selected" : ""}>${escapeHtml(col.status.name)}</option>`).join("")}
                 </select>
               </div>
               
@@ -980,11 +984,14 @@ function updateDetailDrawer() {
 
   // Attach Details actions
   document.querySelector("#btn-close-drawer")?.addEventListener("click", closeDetailDrawer);
+  document.querySelector("#drawer-status")?.addEventListener("change", (e: Event) => {
+    state.drawerStatusDraft = (e.target as HTMLSelectElement).value;
+  });
   
   document.querySelector("#btn-save-issue")?.addEventListener("click", async () => {
     const title = (document.querySelector("#drawer-title") as HTMLInputElement).value;
     const desc = (document.querySelector("#drawer-desc") as HTMLTextAreaElement).value;
-    const status = (document.querySelector("#drawer-status") as HTMLSelectElement).value;
+    const status = state.drawerStatusDraft ?? (document.querySelector("#drawer-status") as HTMLSelectElement).value;
     const priority = (document.querySelector("#drawer-priority") as HTMLSelectElement).value;
     const assigneeId = (document.querySelector("#drawer-assignee") as HTMLSelectElement).value || null;
     const pointsText = (document.querySelector("#drawer-points") as HTMLInputElement).value;
@@ -1020,7 +1027,8 @@ function updateDetailDrawer() {
       renderWorkspace();
       const fresh = state.board?.columns.flatMap(c => c.issues).find(i => i.id === issue.id);
       if (fresh) {
-        state.selectedIssue = fresh;
+        state.selectedIssue = { ...fresh };
+        state.drawerStatusDraft = fresh.status;
         updateDetailDrawer();
       }
     } catch (err: any) {
@@ -1032,6 +1040,10 @@ function updateDetailDrawer() {
       }
       await loadAllData(true);
       renderWorkspace();
+      state.drawerStatusDraft = state.selectedIssue?.status ?? null;
+      if (state.selectedIssue) {
+        updateDetailDrawer();
+      }
     }
   });
 

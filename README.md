@@ -4,6 +4,12 @@ TeamSync is an original FastAPI backend for the SDE-1 project-management assignm
 
 `jira_clone_master/` was treated only as a read-only domain reference. No code, comments, structure, tests, or docs were copied from it.
 
+## Submission Pack
+
+- [Use case scenarios with screenshots](docs/USE_CASE_SCENARIOS.md)
+- [Architecture notes and ERD](docs/ARCHITECTURE.md)
+- [Assignment checklist and requirement map](docs/ASSIGNMENT_CHECKLIST.md)
+
 ## Quick Start
 
 ```powershell
@@ -78,6 +84,40 @@ Key choices:
 - Realtime fanout and presence use Redis pub/sub plus TTL-backed presence when `REDIS_URL` is configured, with in-memory fallback for local runs.
 - Search uses practical SQL `ILIKE` over issues and comments, with indexes documented in the schema.
 
+```mermaid
+flowchart LR
+    Browser[Web Console] -->|REST / WS| API[FastAPI TeamSync API]
+    API -->|SQLAlchemy ORM| DB[(PostgreSQL)]
+    API -->|Pub/Sub + TTL presence| Redis[(Redis)]
+    API -->|Static build output| UI[Mission Control SPA]
+```
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Evaluator
+    participant UI as Mission Control SPA
+    participant API as FastAPI
+    participant DB as PostgreSQL
+
+    Evaluator->>UI: Open board / issue drawer
+    UI->>API: POST /api/issues/:id/transitions
+    API->>DB: Validate workflow + version + audit trail
+    DB-->>API: Commit or reject with 409/422
+    API-->>UI: Updated issue or validation error
+```
+
+## Scenario Walkthrough
+
+See [docs/USE_CASE_SCENARIOS.md](docs/USE_CASE_SCENARIOS.md) for the step-by-step evaluator flow with screenshots:
+
+- API health and board boot
+- workflow violation handling
+- optimistic locking conflict
+- sprint completion with carry-over
+- collaboration mention and notifications
+- search and realtime replay
+
 ## API Overview
 
 | Area | Endpoint | Status | Demo command | Notes |
@@ -121,6 +161,8 @@ Expected: HTTP 422 with `allowed_transitions`.
 9. Use `/api/search?q=Carry&status=In Progress`.
 10. Connect to the WebSocket with `last_event_id=0` to replay missed project events.
 
+For a polished evaluator walkthrough with screenshots, use [docs/USE_CASE_SCENARIOS.md](docs/USE_CASE_SCENARIOS.md).
+
 ## Tests
 
 ```powershell
@@ -147,3 +189,8 @@ See [docs/ASSIGNMENT_CHECKLIST.md](docs/ASSIGNMENT_CHECKLIST.md) for requirement
 - Search uses SQL `ILIKE`; production would use PostgreSQL `tsvector`/GIN or a dedicated search engine.
 - Redis-backed realtime coordination is intentionally lightweight; persisted `realtime_events` remain the authoritative replay source after reconnects.
 - Auth is simplified for backend evaluation with seeded users and explicit actor IDs.
+
+## Integrity Note
+
+- `jira_clone_master/` remains excluded from commits and was used only for domain vocabulary.
+- `.env`, the assignment PDF, and local build/cache artifacts are ignored.
